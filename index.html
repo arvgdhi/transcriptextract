@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transcript Downloader</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f0f0f;
+      --surface:  #171717;
+      --border:   #2a2a2a;
+      --text:     #e8e8e8;
+      --muted:    #666;
+      --accent:   #c8ff00;
+      --error:    #ff5c5c;
+      --success:  #4dff91;
+      --radius:   10px;
+      --font:     'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 64px 16px 80px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 620px;
+    }
+
+    /* Header */
+    .header {
+      margin-bottom: 48px;
+    }
+    .header h1 {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .header p {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* Textarea */
+    .input-label {
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+      display: block;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 180px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      padding: 16px;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    textarea::placeholder { color: var(--muted); }
+    textarea:focus { border-color: #444; }
+
+    /* Button */
+    .actions {
+      margin-top: 14px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    button#run {
+      background: var(--accent);
+      color: #0f0f0f;
+      border: none;
+      border-radius: var(--radius);
+      font-family: var(--font);
+      font-size: 14px;
+      font-weight: 600;
+      padding: 11px 24px;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      flex-shrink: 0;
+    }
+    button#run:hover { opacity: 0.88; }
+    button#run:active { transform: scale(0.97); }
+    button#run:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+    .hint {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    /* Results */
+    .results {
+      margin-top: 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .results-header {
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    .result-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .result-item:first-of-type { border-top: 1px solid var(--border); }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 5px;
+    }
+    .dot.ok    { background: var(--success); }
+    .dot.fail  { background: var(--error); }
+    .dot.spin  { background: var(--muted); animation: pulse 1s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    .result-info { flex: 1; min-width: 0; }
+    .result-url {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 3px;
+    }
+    .result-msg {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+    }
+    .result-msg.error { color: var(--error); font-weight: 400; }
+
+    /* Output dir */
+    .output-dir {
+      margin-top: 32px;
+      padding: 14px 16px;
+      background: var(--surface);
+      border-radius: var(--radius);
+      display: none;
+      align-items: center;
+      gap: 10px;
+    }
+    .output-dir.visible { display: flex; }
+    .output-dir span {
+      font-size: 12px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    .output-dir code {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      color: var(--text);
+      word-break: break-all;
+    }
+
+    /* Summary bar */
+    .summary {
+      margin-top: 20px;
+      font-size: 13px;
+      color: var(--muted);
+      display: none;
+    }
+    .summary.visible { display: block; }
+    .summary .ok-count   { color: var(--success); font-weight: 600; }
+    .summary .fail-count { color: var(--error);   font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div class="header">
+      <h1>Transcript Downloader</h1>
+      <p>Paste YouTube links below — one per line. Each transcript is saved as a separate .txt file.</p>
+    </div>
+
+    <label class="input-label" for="urls">YouTube URLs</label>
+    <textarea
+      id="urls"
+      placeholder="https://www.youtube.com/watch?v=...&#10;https://youtu.be/...&#10;https://www.youtube.com/shorts/..."
+      spellcheck="false"
+    ></textarea>
+
+    <div class="actions">
+      <button id="run">Download transcripts</button>
+      <span class="hint" id="hint"></span>
+    </div>
+
+    <div class="results" id="results"></div>
+
+    <div class="summary" id="summary"></div>
+
+    <div class="output-dir" id="outputDir">
+      <span>Saved to</span>
+      <code id="outputDirPath"></code>
+    </div>
+
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const runBtn    = $('run');
+    const urlsInput = $('urls');
+    const resultsEl = $('results');
+    const summaryEl = $('summary');
+    const outputDir = $('outputDir');
+    const hintEl    = $('hint');
+
+    // Fetch the output directory path on load
+    fetch('/output-dir')
+      .then(r => r.json())
+      .then(d => { $('outputDirPath').textContent = d.dir; })
+      .catch(() => {});
+
+    function parseUrls(raw) {
+      return raw.split('\n')
+        .map(l => l.trim())
+        .filter(Boolean);
+    }
+
+    function createResultItem(url, state, message) {
+      const item = document.createElement('div');
+      item.className = 'result-item';
+      item.dataset.url = url;
+
+      const dot = document.createElement('div');
+      dot.className = `dot ${state}`;
+
+      const info = document.createElement('div');
+      info.className = 'result-info';
+
+      const urlEl = document.createElement('div');
+      urlEl.className = 'result-url';
+      urlEl.textContent = url;
+
+      const msgEl = document.createElement('div');
+      msgEl.className = `result-msg${state === 'fail' ? ' error' : ''}`;
+      msgEl.textContent = message;
+
+      info.appendChild(urlEl);
+      info.appendChild(msgEl);
+      item.appendChild(dot);
+      item.appendChild(info);
+      return item;
+    }
+
+    runBtn.addEventListener('click', async () => {
+      const urls = parseUrls(urlsInput.value);
+      if (!urls.length) {
+        hintEl.textContent = 'Add at least one URL.';
+        setTimeout(() => { hintEl.textContent = ''; }, 2000);
+        return;
+      }
+
+      // Reset UI
+      hintEl.textContent = '';
+      resultsEl.innerHTML = '';
+      summaryEl.classList.remove('visible');
+      outputDir.classList.remove('visible');
+      runBtn.disabled = true;
+
+      // Add a header row
+      const header = document.createElement('div');
+      header.className = 'results-header';
+      header.textContent = `${urls.length} video${urls.length > 1 ? 's' : ''}`;
+      resultsEl.appendChild(header);
+
+      // Render pending items
+      const itemMap = new Map();
+      for (const url of urls) {
+        const item = createResultItem(url, 'spin', 'Fetching…');
+        resultsEl.appendChild(item);
+        itemMap.set(url, item);
+      }
+
+      try {
+        const res = await fetch('/transcripts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`Server responded with ${res.status}`);
+        }
+
+        const data = await res.json();
+        let okCount = 0;
+        let failCount = 0;
+
+        for (const result of data.results) {
+          const item = itemMap.get(result.url);
+          if (!item) continue;
+
+          const dot = item.querySelector('.dot');
+          const msg = item.querySelector('.result-msg');
+
+          if (result.ok) {
+            dot.className = 'dot ok';
+            msg.className = 'result-msg';
+            msg.textContent = result.filename;
+            okCount++;
+          } else {
+            dot.className = 'dot fail';
+            msg.className = 'result-msg error';
+            msg.textContent = result.error || 'Unknown error';
+            failCount++;
+          }
+        }
+
+        // Summary
+        summaryEl.classList.add('visible');
+        const parts = [];
+        if (okCount)   parts.push(`<span class="ok-count">${okCount} saved</span>`);
+        if (failCount) parts.push(`<span class="fail-count">${failCount} failed</span>`);
+        summaryEl.innerHTML = parts.join(' · ');
+
+        if (okCount > 0) {
+          outputDir.classList.add('visible');
+        }
+
+      } catch (err) {
+        resultsEl.innerHTML = '';
+        const item = createResultItem('', 'fail', `Could not reach the server. Is server.py running? (${err.message})`);
+        resultsEl.appendChild(item);
+      }
+
+      runBtn.disabled = false;
+    });
+  </script>
+</body>
+</html>
